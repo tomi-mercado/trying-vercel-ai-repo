@@ -1,12 +1,11 @@
 /** @type {import('prettier').Config} */
 module.exports = {
   endOfLine: 'lf',
-  semi: false,
+  semi: true,
   useTabs: false,
   singleQuote: true,
   arrowParens: 'avoid',
   tabWidth: 2,
-  trailingComma: 'none',
   importOrder: [
     '^(react/(.*)$)|^(react$)',
     '^(next/(.*)$)|^(next$)',
@@ -23,12 +22,12 @@ module.exports = {
     '^@/styles/(.*)$',
     '^@/app/(.*)$',
     '',
-    '^[./]'
+    '^[./]',
   ],
   importOrderSeparation: false,
   importOrderSortSpecifiers: true,
   importOrderBuiltinModulesToTop: true,
   importOrderParserPlugins: ['typescript', 'jsx', 'decorators-legacy'],
   importOrderMergeDuplicateImports: true,
-  importOrderCombineTypeAndValueImports: true
-}
+  importOrderCombineTypeAndValueImports: true,
+};

@@ -1,66 +1,53 @@
-import { kv } from '@vercel/kv'
-import { OpenAIStream, StreamingTextResponse } from 'ai'
-import { Configuration, OpenAIApi } from 'openai-edge'
+import { StreamingTextResponse, LangChainStream } from 'ai'
 
-import { auth } from '@/auth'
-import { nanoid } from '@/lib/utils'
+import { initializeAgentExecutorWithOptions } from 'langchain/agents'
+import { ChatOpenAI } from 'langchain/chat_models/openai'
+import { DynamicStructuredTool } from 'langchain/tools'
+import { z } from 'zod'
 
 export const runtime = 'edge'
 
 export async function POST(req: Request) {
-  const json = await req.json()
-  const { messages, previewToken } = json
-  const session = await auth()
+  const { messages } = await req.json()
+  console.log(messages)
 
-  if (process.env.VERCEL_ENV !== 'preview') {
-    if (session == null) {
-      return new Response('Unauthorized', { status: 401 })
-    }
-  }
+  const { stream, handlers } = LangChainStream()
 
-  const configuration = new Configuration({
-    apiKey: previewToken || process.env.OPENAI_API_KEY
-  })
-
-  const openai = new OpenAIApi(configuration)
-
-  const res = await openai.createChatCompletion({
-    model: 'gpt-3.5-turbo',
-    messages,
-    temperature: 0.7,
-    stream: true
-  })
-
-  const stream = OpenAIStream(res, {
-    async onCompletion(completion) {
-      const title = json.messages[0].content.substring(0, 100)
-      const userId = session?.user.id
-      if (userId) {
-        const id = json.id ?? nanoid()
-        const createdAt = Date.now()
-        const path = `/chat/${id}`
-        const payload = {
-          id,
-          title,
-          userId,
-          createdAt,
-          path,
-          messages: [
-            ...messages,
-            {
-              content: completion,
-              role: 'assistant'
-            }
-          ]
-        }
-        await kv.hmset(`chat:${id}`, payload)
-        await kv.zadd(`user:chat:${userId}`, {
-          score: createdAt,
-          member: `chat:${id}`
+  const executor = await initializeAgentExecutorWithOptions(
+    [
+      new DynamicStructuredTool({
+        name: 'email-sender',
+        description:
+          'Send an email. Receives a JSON with to, subject, and body fields.',
+        func: async args => {
+          console.log('===== EMAIL HERE =====')
+          console.log(args)
+          console.log('===== EMAIL HERE =====')
+          return 'Email sent'
+        },
+        schema: z.object({
+          to: z.string(),
+          subject: z.string(),
+          body: z.string()
         })
-      }
+      })
+    ],
+    new ChatOpenAI({
+      modelName: 'gpt-3.5-turbo-0613',
+      temperature: 0,
+      callbacks: [handlers],
+      streaming: true
+    }),
+    {
+      agentType: 'openai-functions',
+      verbose: true
+      // callbacks: [handlers]
     }
-  })
+  )
+
+  executor.run(
+    'I need to send an formal email to my boss about the new project. His email is pepe@joseph.co. Should be formal. You have to create everything from scratch and send it.'
+  )
 
   return new StreamingTextResponse(stream)
 }
